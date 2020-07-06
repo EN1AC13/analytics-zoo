@@ -26,7 +26,7 @@ from zoo.automl.common.metrics import Evaluator
 
 class VanillaLSTM(BaseModel):
 
-    def __init__(self, check_optional_config=False, future_seq_len=1):
+    def __init__(self, check_optional_config=True, future_seq_len=1):
         """
         Constructor of Vanilla LSTM model
         """
@@ -36,7 +36,6 @@ class VanillaLSTM(BaseModel):
         self.feature_num = None
         self.metric = None
         self.batch_size = None
-        self.loss = None
 
     def _get_dropout(self, input_tensor, p=0.5, mc=False):
         if mc:
@@ -53,8 +52,6 @@ class VanillaLSTM(BaseModel):
         super()._check_config(**config)
         self.metric = config.get('metric', 'mean_squared_error')
         self.batch_size = config.get('batch_size', 1024)
-        self.feature_num = config["feature_num"]
-        self.loss = config.get("loss", "mse")
 
         inp = Input(shape=(None, self.feature_num))
         lstm_1 = LSTM(units=config.get('lstm_1_units', 20),
@@ -84,7 +81,7 @@ class VanillaLSTM(BaseModel):
         # self.model.add(Dropout(config.get('dropout_2', 0.2)))
 
         # self.model.add(Dense(self.future_seq_len))
-        self.model.compile(loss=self.loss,
+        self.model.compile(loss='mse',
                            metrics=[self.metric],
                            optimizer=keras.optimizers.RMSprop(lr=config.get('lr', 0.001)))
         return self.model
@@ -105,7 +102,7 @@ class VanillaLSTM(BaseModel):
         :param config: optimization hyper parameters
         :return: the resulting metric
         """
-        config.update({"feature_num": x.shape[2]})
+        self.feature_num = x.shape[2]
         # if model is not initialized, __build the model
         if self.model is None:
             self._build(mc=mc, **config)
@@ -113,7 +110,7 @@ class VanillaLSTM(BaseModel):
         hist = self.model.fit(x, y,
                               validation_data=validation_data,
                               batch_size=self.batch_size,
-                              epochs=config.get("epochs", 10),
+                              epochs=config.get('epochs', 20),
                               verbose=verbose
                               )
         # print(hist.history)
@@ -191,7 +188,9 @@ class VanillaLSTM(BaseModel):
 
     def _get_required_parameters(self):
         return {
-            "feature_num"
+            # 'input_shape_x',
+            # 'input_shape_y',
+            # 'out_units'
         }
 
     def _get_optional_parameters(self):
@@ -203,6 +202,5 @@ class VanillaLSTM(BaseModel):
             'metric',
             'lr',
             'epochs',
-            'batch_size',
-            'loss'
+            'batch_size'
         }

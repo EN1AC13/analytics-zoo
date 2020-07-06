@@ -19,13 +19,12 @@ import pytest
 from test.zoo.pipeline.utils.test_utils import ZooTestCase
 from zoo.automl.model.VanillaLSTM import *
 from zoo.automl.feature.time_sequence import TimeSequenceFeatureTransformer
-from numpy.testing import assert_array_almost_equal
 
 
 class TestVanillaLSTM(ZooTestCase):
 
     def setup_method(self, method):
-        # super().setup_method(method)
+        super().setup_method(method)
         train_data = pd.DataFrame(data=np.random.randn(64, 4))
         val_data = pd.DataFrame(data=np.random.randn(16, 4))
         test_data = pd.DataFrame(data=np.random.randn(16, 4))
@@ -52,9 +51,6 @@ class TestVanillaLSTM(ZooTestCase):
             "batch_size": 32,
         }
         self.model = VanillaLSTM(check_optional_config=False, future_seq_len=future_seq_len)
-
-    def teardown_method(self, method):
-        pass
 
     def test_fit_eval(self):
         print("fit_eval:", self.model.fit_eval(self.x_train,
@@ -90,7 +86,7 @@ class TestVanillaLSTM(ZooTestCase):
             save(dirname, model=self.model)
             restore(dirname, model=new_model, config=self.config)
             predict_after = new_model.predict(self.x_test)
-            assert_array_almost_equal(predict_before, predict_after, decimal=2)
+            assert np.allclose(predict_before, predict_after)
             new_config = {'epochs': 2}
             new_model.fit_eval(self.x_train, self.y_train, **new_config)
 

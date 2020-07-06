@@ -55,7 +55,7 @@ class BaseModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def save(self, model_path, config_path, **config):
+    def save(self, model_path, config_path):
         """
         save model to file.
         :param model_path: the model file path to be saved to.

@@ -1,4 +1,4 @@
-# Copyright 2018 Analytics Zoo Authors.
+# Copyright (c) 2018 Roland Zimmermann, 2019 Analytics Zoo Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 #
 # MIT License
 #
@@ -34,7 +33,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-#
+
 import numpy as np
 import time
 from tensorflow.keras.models import Model
@@ -48,7 +47,6 @@ import tensorflow as tf
 from zoo.automl.common.metrics import Evaluator
 import pandas as pd
 from zoo.automl.model.abstract import BaseModel
-from zoo.automl.common.util import save_config
 
 
 class AttentionRNNWrapper(Wrapper):
@@ -61,8 +59,8 @@ class AttentionRNNWrapper(Wrapper):
         This way, after each time step an attention vector is calculated
         based on the current output of the LSTM and the entire input time series.
         This attention vector is then used as a weight vector to choose special values
-        from the input data. This data is then finally concatenated to the next input time step's
-        data. On this a linear transformation in the same space as the input data's space
+        from the input data. This data is then finally concatenated to the next input
+        time step's data. On this a linear transformation in the same space as the input data's space
         is performed before the data is fed into the RNN cell again.
         This technique is similar to the input-feeding method described in the paper cited
     """
@@ -164,16 +162,15 @@ class AttentionRNNWrapper(Wrapper):
             base_initial_state = self.layer.get_initial_state(x)
             if len(base_initial_state) != len(initial_states):
                 raise ValueError(
-                    "initial_state does not have the correct length. Received length {0} "
-                    "but expected {1}".format(len(initial_states), len(base_initial_state)))
+                    "initial_state does not have the correct length. Received length {0} but expected {1}".format(
+                        len(initial_states), len(base_initial_state)))
             else:
                 # check the state' shape
                 for i in range(len(initial_states)):
-                    # initial_states[i][j] != base_initial_state[i][j]:
-                    if not initial_states[i].shape.is_compatible_with(base_initial_state[i].shape):
+                    if not initial_states[i].shape.is_compatible_with(base_initial_state[
+                                                                          i].shape):  # initial_states[i][j] != base_initial_state[i][j]:
                         raise ValueError(
-                            "initial_state does not match the default base state of the layer. "
-                            "Received {0} but expected {1}".format(
+                            "initial_state does not match the default base state of the layer. Received {0} but expected {1}".format(
                                 [x.shape for x in initial_states],
                                 [x.shape for x in base_initial_state]))
         else:
@@ -236,12 +233,13 @@ class AttentionRNNWrapper(Wrapper):
 
 class MTNetKeras(BaseModel):
 
-    def __init__(self, check_optional_config=False, future_seq_len=1):
+    def __init__(self, check_optional_config=True, future_seq_len=1):
 
         """
         Constructor of MTNet model
         """
-        self.check_optional_config = check_optional_config
+        # self.config = config
+        # self._get_configs()
         self.config = None
         # config parameter
         self.time_step = None  # timestep
@@ -249,39 +247,35 @@ class MTNetKeras(BaseModel):
         self.long_num = None  # the number of the long-term memory series
         self.ar_window = None  # the window size of ar model
         self.feature_num = None  # input's variable dimension (convolution filter width)
-        self.output_dim = None  # output's variable dimension
+        self.output_dim = None # output's variable dimension
         self.cnn_hid_size = None
         # last size is equal to en_conv_hidden_size, should be a list
         self.rnn_hid_sizes = None
         self.last_rnn_size = None
-        self.cnn_dropout = None
-        self.rnn_dropout = None
+        self.dropout = None
         self.lr = None
         self.batch_size = None
-        self.loss = None
 
         self.saved_configs = {"cnn_height", "long_num", "time_step", "ar_window",
-                              "cnn_hid_size", "rnn_hid_sizes", "cnn_dropout",
-                              "rnn_dropout", "lr", "batch_size",
+                              "cnn_hid_size", "rnn_hid_sizes", "dropout", "lr", "batch_size",
                               "epochs", "metrics", "mc",
-                              "feature_num", "output_dim", "loss"}
+                              "feature_num", "output_dim"}
         self.model = None
         self.metrics = None
         self.mc = None
         self.epochs = None
 
-    def apply_config(self, rs=False, config=None):
-        super()._check_config(**config)
+    def _get_configs(self, rs=False, config=None):
         if rs:
             config_names = set(config.keys())
             assert config_names.issuperset(self.saved_configs)
             # assert config_names.issuperset(self.lr_decay_configs) or \
             #        config_names.issuperset(self.lr_configs)
-        self.epochs = config.get("epochs")
-        self.metrics = config.get("metrics", ["mean_squared_error"])
-        self.mc = config.get("mc")
-        self.feature_num = config["feature_num"]
-        self.output_dim = config["output_dim"]
+            self.epochs = config.get("epochs")
+            self.metrics = config.get("metrics")
+            self.mc = config.get("mc")
+            self.feature_num = config.get("feature_num")
+            self.output_dim = config.get("output_dim")
         self.time_step = config.get("time_step", 1)
         self.long_num = config.get("long_num", 7)
         self.ar_window = config.get("ar_window", 1)
@@ -289,9 +283,8 @@ class MTNetKeras(BaseModel):
         self.cnn_hid_size = config.get("cnn_hid_size", 32)
         self.rnn_hid_sizes = config.get("rnn_hid_sizes", [16, 32])
         self.last_rnn_size = self.rnn_hid_sizes[-1]
-        self.rnn_dropout = config.get("rnn_dropout", 0.2)
-        self.cnn_dropout = config.get("cnn_dropout", 0.2)
-        self.loss = config.get('loss', "mae")
+        self.dropout = config.get("dropout", 0.2)
+
         self.batch_size = config.get("batch_size", 64)
         self.lr = config.get('lr', 0.001)
         self._check_configs()
@@ -307,13 +300,17 @@ class MTNetKeras(BaseModel):
         #     "Invalid configuration value. 'cnn_hid_size' must be equal to the last element of " \
         #     "'rnn_hid_sizes'"
 
-    def build(self):
+    def _get_len(self, x, y):
+        self.feature_num = x.shape[-1]
+        self.output_dim = y.shape[-1]
+
+    def _build_train(self, mc=False, metrics=None):
         """
         build MTNet model
         :param config:
         :return:
         """
-        training = True if self.mc else None
+        training = True if mc else None
         # long-term time series historical data inputs
         long_input = Input(shape=(self.long_num, self.time_step, self.feature_num))
         # short-term time series historical data
@@ -326,8 +323,7 @@ class MTNetKeras(BaseModel):
         context = self.__encoder(long_input, num=self.long_num, name='context', training=training)
         # context = context_model(long_input)
         # query: (batch, 1, last_rnn_size)
-        query_input = Reshape((1, self.time_step, self.feature_num),
-                              name='reshape_query')(short_input)
+        query_input = Reshape((1, self.time_step, self.feature_num), name='reshape_query')(short_input)
         query = self.__encoder(query_input, num=1, name='query', training=training)
         # query = query_model(query_input)
 
@@ -340,16 +336,14 @@ class MTNetKeras(BaseModel):
         # concat: (batch, long_num + 1, last_rnn_size)
 
         pred_x = concatenate([out, query], axis=1)
-        reshaped_pred_x = Reshape((self.last_rnn_size * (self.long_num + 1),),
-                                  name="reshape_pred_x")(pred_x)
+        reshaped_pred_x = Reshape((self.last_rnn_size * (self.long_num + 1),), name="reshape_pred_x")(pred_x)
         nonlinear_pred = Dense(units=self.output_dim,
                                kernel_initializer=TruncatedNormal(stddev=0.1),
                                bias_initializer=Constant(0.1),)(reshaped_pred_x)
 
         # ------------ ar component ------------
         if self.ar_window > 0:
-            ar_pred_x = Reshape((self.ar_window * self.feature_num,),
-                                name="reshape_ar")(short_input[:, -self.ar_window:])
+            ar_pred_x = Reshape((self.ar_window * self.feature_num,), name="reshape_ar")(short_input[:, -self.ar_window:])
             linear_pred = Dense(units=self.output_dim,
                                 kernel_initializer=TruncatedNormal(stddev=0.1),
                                 bias_initializer=Constant(0.1),)(ar_pred_x)
@@ -377,8 +371,8 @@ class MTNetKeras(BaseModel):
         #                    metrics=metrics,
         #                    optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule))
 
-        self.model.compile(loss=self.loss,
-                           metrics=self.metrics,
+        self.model.compile(loss="mae",
+                           metrics=metrics,
                            optimizer=tf.keras.optimizers.Adam(lr=self.lr))
 
         return self.model
@@ -407,13 +401,13 @@ class MTNetKeras(BaseModel):
                          kernel_initializer=TruncatedNormal(stddev=0.1),
                          bias_initializer=Constant(0.1),
                          activation="relu")(reshaped_input)
-        cnn_out = Dropout(self.cnn_dropout)(cnn_out, training=training)
+        cnn_out = Dropout(self.dropout)(cnn_out, training=training)
 
         rnn_input = Lambda(lambda x:
-                           K.reshape(x, (-1, num, Tc, self.cnn_hid_size)),)(cnn_out)
+                                K.reshape(x, (-1, num, Tc, self.cnn_hid_size)),)(cnn_out)
 
         # use AttentionRNNWrapper
-        rnn_cells = [GRUCell(h_size, activation="relu", dropout=self.rnn_dropout)
+        rnn_cells = [GRUCell(h_size, activation="relu", dropout=self.dropout)
                      for h_size in self.rnn_hid_sizes]
 
         attention_rnn = AttentionRNNWrapper(RNN(rnn_cells),
@@ -435,77 +429,54 @@ class MTNetKeras(BaseModel):
             output = outputs[0]
         return output
 
-    def _reshape_input_x(self, x):
+    def _gen_hist_inputs(self, x):
         long_term = np.reshape(x[:, : self.time_step * self.long_num],
-                               [-1, self.long_num, self.time_step, x.shape[-1]])
+                               [-1, self.long_num, self.time_step, self.feature_num])
         short_term = np.reshape(x[:, self.time_step * self.long_num:],
-                                [-1, self.time_step, x.shape[-1]])
+                                [-1, self.time_step, self.feature_num])
         return long_term, short_term
 
-    def _pre_processing(self, x, validation_data=None):
-        long_term, short_term = self._reshape_input_x(x)
+    def _pre_processing(self, x, y, validation_data):
+        self._get_len(x, y)
+        long_term, short_term = self._gen_hist_inputs(x)
         if validation_data:
             val_x, val_y = validation_data
-            long_val, short_val = self._reshape_input_x(val_x)
+            long_val, short_val = self._gen_hist_inputs(val_x)
             validation_data = ([long_val, short_val], val_y)
-        return [long_term, short_term], validation_data
+        return [long_term, short_term], y, validation_data
 
-    def _add_config_attributes(self, config, **new_attributes):
-        # new_attributes are among ["metrics", "epochs", "mc", "feature_num", "output_dim"]
+    def _get_attributes(self, mc, metrics, epochs, config):
+        # for incremental fitting after restore
         if self.config is None:
             self.config = config
-        else:
-            if config:
-                raise ValueError("You can only pass new configuations for 'mc', 'epochs' and "
-                                 "'metrics' during incremental fitting. "
-                                 "Additional configs passed are {}".format(config))
-
-        if new_attributes["metrics"] is None:
-            del new_attributes["metrics"]
-        self.config.update(new_attributes)
-
-    def _check_input(self, x, y):
-        input_feature_num = x.shape[-1]
-        input_output_dim = y.shape[-1]
-        if input_feature_num is None:
-            raise ValueError("input x is None!")
-        if input_output_dim is None:
-            raise ValueError("input y is None!")
-
-        if self.feature_num is not None and self.feature_num != input_feature_num:
-            raise ValueError("input x has different feature number (the shape of last dimension) "
-                             "{} with the fitted model, which is {}."
-                             .format(input_feature_num, self.feature_num))
-        if self.output_dim is not None and self.output_dim != input_output_dim:
-            raise ValueError("input y has different prediction size (the shape of last dimension) "
-                             "of {} with the fitted model, which is {}."
-                             .format(input_output_dim, self.output_dim))
-        return input_feature_num, input_output_dim
+            self._get_configs(config=self.config)
+        if self.mc != mc:
+            self.mc = mc
+        if self.metrics != metrics and metrics is not None:
+            self.metrics = metrics
+        if self.epochs != epochs:
+            self.epochs = epochs
+        if self.metrics is None:
+            self.metrics = ['mean_squared_error']
 
     def fit_eval(self, x, y, validation_data=None, mc=False, metrics=None,
                  epochs=10, verbose=0, **config):
-        feature_num, output_dim = self._check_input(x, y)
-        self._add_config_attributes(config, epochs=epochs, mc=mc, metrics=metrics,
-                                    feature_num=feature_num, output_dim=output_dim)
-        self.apply_config(config=self.config)
-        processed_x, processed_validation_data = self._pre_processing(x, validation_data)
-
+        self._get_attributes(mc=mc, metrics=metrics, epochs=epochs, config=config)
+        x, y, validation_data = self._pre_processing(x, y, validation_data)
         # if model is not initialized, __build the model
         if self.model is None:
             st = time.time()
-            self.build()
+            self._build_train(mc=self.mc, metrics=self.metrics)
             end = time.time()
-            if verbose == 1:
-                print("Build model took {}s".format(end - st))
+            print("Build model took {}s".format(end - st))
 
         st = time.time()
-        hist = self.model.fit(processed_x, y, validation_data=processed_validation_data,
+        hist = self.model.fit(x, y, validation_data=validation_data,
                               batch_size=self.batch_size,
                               epochs=self.epochs,
                               verbose=verbose)
 
-        if verbose == 1:
-            print("Fit model took {}s".format(time.time() - st))
+        print("Fit model took {}s".format(time.time() - st))
         if validation_data is None:
             # get train metrics
             # results = self.model.evaluate(x, y)
@@ -531,7 +502,7 @@ class MTNetKeras(BaseModel):
         return [Evaluator.evaluate(m, y, y_pred, multioutput=multioutput) for m in metrics]
 
     def predict(self, x, mc=False):
-        input_x = self._reshape_input_x(x)
+        input_x = self._gen_hist_inputs(x)
         return self.model.predict(input_x)
 
     def predict_with_uncertainty(self, x, n_iter=100):
@@ -552,8 +523,7 @@ class MTNetKeras(BaseModel):
                           "ar_window": self.ar_window,
                           "cnn_hid_size": self.cnn_hid_size,
                           "rnn_hid_sizes": self.rnn_hid_sizes,
-                          "cnn_dropout": self.cnn_dropout,
-                          "rnn_dropout": self.rnn_dropout,
+                          "dropout": self.dropout,
                           "lr": self.lr,
                           "batch_size": self.batch_size,
                           # for fit eval
@@ -563,7 +533,6 @@ class MTNetKeras(BaseModel):
                           "mc": self.mc,
                           "feature_num": self.feature_num,
                           "output_dim": self.output_dim,
-                          "loss": self.loss
                           }
         assert set(config_to_save.keys()) == self.saved_configs, \
             "The keys in config_to_save is not the same as self.saved_configs." \
@@ -591,27 +560,113 @@ class MTNetKeras(BaseModel):
         :param config: the trial config
         """
         self.config = config
-        self.apply_config(rs=True, config=config)
-        self.build()
+        self._get_configs(rs=True, config=config)
+        self._build_train(mc=self.mc, metrics=self.metrics)
         self.model.load_weights(model_path)
 
     def _get_optional_parameters(self):
         return {
             "batch_size",
-            "cnn_dropout",
-            "rnn_dropout",
+            "dropout",
             "time_step",
-            "cnn_height",
+            "filter_size",
             "long_num",
             "ar_size",
-            "loss",
-            "cnn_hid_size",
-            "rnn_hid_sizes",
-            "lr"
         }
 
     def _get_required_parameters(self):
-        return {
-            "feature_num",
-            "output_dim"
-        }
+        return None
+
+
+if __name__ == "__main__":
+    from zoo.automl.feature.time_sequence import TimeSequenceFeatureTransformer
+    from zoo.automl.common.util import *
+
+    import os
+    import pandas as pd
+    import shutil
+
+    dataset_path = os.getenv("ANALYTICS_ZOO_HOME") + "/bin/data/NAB/nyc_taxi/nyc_taxi.csv"
+    # dataset_path = "~/sources/automl-analytics-zoo/dist/bin/data/NAB/nyc_taxi/nyc_taxi.csv"
+    df = pd.read_csv(dataset_path)
+
+    future_seq_len = 1
+    model = MTNetKeras()
+    train_df, val_df, test_df = split_input_df(df, val_split_ratio=0.1, test_split_ratio=0.1)
+    feature_transformer = TimeSequenceFeatureTransformer(future_seq_len=future_seq_len)
+    config = {
+        'selected_features': ['IS_WEEKEND(datetime)', 'MONTH(datetime)', 'IS_AWAKE(datetime)',
+                              'HOUR(datetime)'],
+        'batch_size': 64,
+        'epochs': 1,
+        "time_step": 4,
+        "long_num": 3,
+        "cnn_height": 2,
+        'ar_window': 2,
+        'dropout': 0.2,
+        # past_seq_len = (n + 1) * T
+    }
+    config['past_seq_len'] = (config['long_num'] + 1) * config['time_step']
+    x_train, y_train = feature_transformer.fit_transform(train_df, **config)
+    x_val, y_val = feature_transformer.transform(val_df, is_train=True)
+    x_test, y_test = feature_transformer.transform(test_df, is_train=True)
+    # y_train = np.c_[y_train, y_train/2]
+    # y_test = np.c_[y_test, y_test/2]
+
+    mc = True
+    print("fit_eval:", model.fit_eval(x_train, y_train, validation_data=(x_val, y_val), verbose=1,
+                                      mc=mc, **config))
+
+    print("evaluate:", model.evaluate(x_test, y_test))
+    y_pred = model.predict(x_test)
+
+    if mc:
+        pred, uncertainty = model.predict_with_uncertainty(x_test, 2)
+        assert np.any(uncertainty)
+
+    else:
+        try:
+            dirname = "tmp"
+            model_1 = MTNetKeras()
+            print("saving")
+            save(dirname, model=model)
+            print("save done ")
+
+            restore(dirname, model=model_1, config=config)
+            print("restore done")
+            predict_after = model_1.predict(x_test)
+            assert np.allclose(y_pred, predict_after), \
+                "Prediction values are not the same after restore: " \
+                "predict before is {}, and predict after is {}".format(y_pred,
+                                                                       predict_after)
+            new_config = {'epochs': 1}
+            model_1.fit_eval(x_train, y_train, **new_config)
+            print("evaluate:", model_1.evaluate(x_test, y_test))
+        finally:
+            shutil.rmtree("tmp")
+#
+#
+#     from matplotlib import pyplot as plt
+#
+#     y_test = np.squeeze(y_test)
+#     y_pred = np.squeeze(y_pred)
+#
+#
+#     def plot_result(y_test, y_pred):
+#         # target column of dataframe is "value"
+#         # past sequence length is 50
+#         # pred_value = pred_df["value"].values
+#         # true_value = test_df["value"].values[50:]
+#         fig, axs = plt.subplots()
+#
+#         axs.plot(y_pred, color='red', label='predicted values')
+#         axs.plot(y_test, color='blue', label='actual values')
+#         axs.set_title('the predicted values and actual values (for the test data)')
+#
+#         plt.xlabel('test data index')
+#         plt.ylabel('number of taxi passengers')
+#         plt.legend(loc='upper left')
+#         plt.savefig("MTNet_result_keras.png")
+#
+#
+#     plot_result(y_test, y_pred)

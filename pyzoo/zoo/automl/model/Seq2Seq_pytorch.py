@@ -1,19 +1,3 @@
-#
-# Copyright 2018 Analytics Zoo Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-
 import random
 
 import torch
@@ -385,3 +369,79 @@ class Seq2SeqPytorch(BaseModel):
             'epochs',
             'batch_size'
         }
+
+
+if __name__ == "__main__":
+    dataset_path = os.getenv("ANALYTICS_ZOO_HOME") + "/bin/data/NAB/nyc_taxi/nyc_taxi.csv"
+    df = pd.read_csv(dataset_path)
+    from zoo.automl.common.util import split_input_df
+
+    train_df, val_df, test_df = split_input_df(df, val_split_ratio=0.1, test_split_ratio=0.1)
+    future_seq_len = 2
+    feature_transformer = TimeSequenceFeatureTransformer(future_seq_len=future_seq_len)
+    model = Seq2SeqPytorch(check_optional_config=False, future_seq_len=future_seq_len)
+
+    config = {
+        # 'input_shape_x': x_train.shape[1],
+        # 'input_shape_y': x_train.shape[-1],
+        'selected_features': ['IS_WEEKEND(datetime)', 'MONTH(datetime)', 'IS_AWAKE(datetime)',
+                              'HOUR(datetime)'],
+        'batch_size': 64,
+        'epochs': 20,
+        'past_seq_len': 4,
+    }
+    x_train, y_train = feature_transformer.fit_transform(train_df, **config)
+    x_train = x_train.astype(np.float32)
+    y_train = y_train.astype(np.float32)
+    x_test, y_test = feature_transformer.transform(test_df, is_train=True)
+    x_test = x_test.astype(np.float32)
+    y_test = y_test.astype(np.float32)
+
+    mc = False
+    print("fit_eval:", model.fit_eval(x_train, y_train, validation_data=(x_test, y_test),
+                                      verbose=1,
+                                      mc=mc, **config))
+    print("evaluate:", model.evaluate(x_test, y_test))
+    if not mc:
+        y_pred = model.predict(x_test)
+        assert y_pred.shape == (x_test.shape[0], future_seq_len)
+
+        dirname = 'tmp'
+        model.save('tmp.pth', 'tmp.json')
+        config = load_config('tmp.json')
+        model.restore('tmp.pth', **config)
+        # restore(dirname, model=model, config=config)
+        os.remove('tmp.pth')
+        os.remove('tmp.json')
+
+        y_pred_after = model.predict(x_test)
+        assert np.allclose(y_pred, y_pred_after)
+    else:
+        y_pred, y_uncertainty = model.predict_with_uncertainty(x_test, n_iter=3)
+        assert y_pred.shape == (x_test.shape[0], future_seq_len)
+        assert y_uncertainty.shape == (x_test.shape[0], future_seq_len)
+        assert np.any(y_uncertainty)
+
+    # from matplotlib import pyplot as plt
+    #
+    # y_test = np.squeeze(y_test)
+    # y_pred = np.squeeze(y_pred)
+    #
+    # def plot_result(y_test, y_pred):
+    #     # target column of dataframe is "value"
+    #     # past sequence length is 50
+    #     # pred_value = pred_df["value"].values
+    #     # true_value = test_df["value"].values[50:]
+    #     fig, axs = plt.subplots()
+    #
+    #     axs.plot(y_pred, color='red', label='predicted values')
+    #     axs.plot(y_test, color='blue', label='actual values')
+    #     axs.set_title('the predicted values and actual values (for the test data)')
+    #
+    #     plt.xlabel('test data index')
+    #     plt.ylabel('number of taxi passengers')
+    #     plt.legend(loc='upper left')
+    #     plt.savefig("pytorch_seq2seq_result.png")
+    #
+    #
+    # plot_result(y_test, y_pred)

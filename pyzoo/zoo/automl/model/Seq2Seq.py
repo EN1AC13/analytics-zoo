@@ -233,6 +233,7 @@ class LSTMSeq2Seq(BaseModel):
             self._build_train(mc=mc, **config)
 
         # batch_size = config.get('batch_size', 64)
+        epochs = config.get('epochs', 10)
         # lr = self.lr
         # name = "seq2seq-batch_size-{}-epochs-{}-lr-{}-time-{}"\
         #     .format(batch_size, epochs, lr, time())
@@ -241,7 +242,7 @@ class LSTMSeq2Seq(BaseModel):
         hist = self.model.fit([x, decoder_input_data], y,
                               validation_data=validation_data,
                               batch_size=self.batch_size,
-                              epochs=config.get("epochs", 10),
+                              epochs=epochs,
                               verbose=verbose,
                               # callbacks=[tensorboard]
                               )
@@ -299,7 +300,7 @@ class LSTMSeq2Seq(BaseModel):
 
         config_to_save = {"past_seq_len": self.past_seq_len,
                           "feature_num": self.feature_num,
-                          "future_seq_len": self.future_seq_len,
+                          # "future_seq_len": self.future_seq_len,
                           "target_col_num": self.target_col_num,
                           "metric": self.metric,
                           "latent_dim": self.latent_dim,
@@ -316,7 +317,7 @@ class LSTMSeq2Seq(BaseModel):
 
         self.past_seq_len = config["past_seq_len"]
         self.feature_num = config["feature_num"]
-        self.future_seq_len = config["future_seq_len"]
+        # self.future_seq_len = config["future_seq_len"]
         self.target_col_num = config["target_col_num"]
         self.metric = config["metric"]
         self.latent_dim = config["latent_dim"]
@@ -343,3 +344,65 @@ class LSTMSeq2Seq(BaseModel):
             'epochs',
             'batch_size'
         }
+
+
+if __name__ == "__main__":
+    dataset_path = os.getenv("ANALYTICS_ZOO_HOME") + "/bin/data/NAB/nyc_taxi/nyc_taxi.csv"
+    df = pd.read_csv(dataset_path)
+    from zoo.automl.common.util import split_input_df
+    train_df, val_df, test_df = split_input_df(df, val_split_ratio=0.1, test_split_ratio=0.1)
+    future_seq_len = 2
+    feature_transformer = TimeSequenceFeatureTransformer(future_seq_len=future_seq_len)
+    model = LSTMSeq2Seq(check_optional_config=False, future_seq_len=future_seq_len)
+
+    config = {
+        # 'input_shape_x': x_train.shape[1],
+        # 'input_shape_y': x_train.shape[-1],
+        'selected_features': ['IS_WEEKEND(datetime)', 'MONTH(datetime)', 'IS_AWAKE(datetime)',
+                              'HOUR(datetime)'],
+        'batch_size': 64,
+        'epochs': 20
+    }
+    x_train, y_train = feature_transformer.fit_transform(train_df, **config)
+    x_test, y_test = feature_transformer.transform(test_df, is_train=True)
+
+    print("fit_eval:", model.fit_eval(x_train, y_train, validation_data=(x_test, y_test),
+                                      mc=True, **config))
+    print("evaluate:", model.evaluate(x_test, y_test))
+    y_pred = model.predict(x_test)
+    print(y_pred.shape)
+    y_pred, y_uncertainty = model.predict_with_uncertainty(x_test, n_iter=3)
+    print("shape of output of uncertain predict:", y_pred.shape, y_uncertainty.shape)
+    print(y_uncertainty[:5])
+
+    dirname = 'tmp'
+    save(dirname, model=model)
+    restore(dirname, model=model, config=config)
+    y_pred, y_uncertainty = model.predict_with_uncertainty(x_test, n_iter=3)
+    print("shape of output of uncertain predict:", y_pred.shape, y_uncertainty.shape)
+    print(y_uncertainty[:5])
+
+    import shutil
+    shutil.rmtree(dirname)
+    # from matplotlib import pyplot as plt
+    #
+    # y_test = np.squeeze(y_test)
+    # y_pred = np.squeeze(y_pred)
+    #
+    # def plot_result(y_test, y_pred):
+    #     # target column of dataframe is "value"
+    #     # past sequence length is 50
+    #     # pred_value = pred_df["value"].values
+    #     # true_value = test_df["value"].values[50:]
+    #     fig, axs = plt.subplots()
+    #
+    #     axs.plot(y_pred, color='red', label='predicted values')
+    #     axs.plot(y_test, color='blue', label='actual values')
+    #     axs.set_title('the predicted values and actual values (for the test data)')
+    #
+    #     plt.xlabel('test data index')
+    #     plt.ylabel('number of taxi passengers')
+    #     plt.legend(loc='upper left')
+    #     plt.savefig("seq2seq_result.png")
+    #
+    # plot_result(y_test, y_pred)

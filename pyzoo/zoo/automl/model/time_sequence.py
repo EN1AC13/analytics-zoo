@@ -55,7 +55,7 @@ class TimeSequenceModel(BaseModel):
     #         if verbose == 1:
     #             print("Model selection: LSTM Seq2Seq model is selected.")
 
-    def fit_eval(self, x, y, validation_data=None, mc=False, metric="mse", verbose=0, **config):
+    def fit_eval(self, x, y, validation_data=None, mc=False, verbose=0, **config):
         """
         fit for one iteration
         :param x: 3-d array in format (no. of samples, past sequence length, 2+feature length),
@@ -68,12 +68,11 @@ class TimeSequenceModel(BaseModel):
         :param validation_data: tuple in format (x_test,y_test), data used for validation.
         If this is specified, validation result will be the optimization target for automl.
         Otherwise, train metric will be the optimization target.
-        :param metric: the way to measure the performance of model
         :param config: optimization hyper parameters
         :return: the resulting metric
         """
         if not self.model:
-            self._sel_model(config, verbose=1)
+            self._sel_model(config)
 
         return self.model.fit_eval(x, y,
                                    validation_data=validation_data,
@@ -81,13 +80,12 @@ class TimeSequenceModel(BaseModel):
                                    verbose=verbose,
                                    **config)
 
-    def _sel_model(self, config, verbose=0):
+    def _sel_model(self, config):
         self.selected_model = config.get("model", "LSTM")
         self.model = MODEL_MAP[self.selected_model](
             check_optional_config=self.check_optional_config,
             future_seq_len=self.future_seq_len)
-        if verbose != 0:
-            print(self.selected_model, "is selected.")
+        print(self.selected_model, "is selected.")
 
     def evaluate(self, x, y, metric=['mse']):
         """
@@ -126,7 +124,7 @@ class TimeSequenceModel(BaseModel):
         assert "future_seq_len" in config
         assert "model" in config
         self.future_seq_len = config["future_seq_len"]
-        self._sel_model(config=config, verbose=0)
+        self._sel_model(config=config)
         # self._model_selection(future_seq_len=config["future_seq_len"], verbose=0)
         self.model.restore(model_path, **config)
 
